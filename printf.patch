@@ -3,17 +3,17 @@ index 471ec6c..7f5532f 100644
 --- a/src/printf/printf.c
 +++ b/src/printf/printf.c
 @@ -47,11 +47,6 @@ extern "C" {
- #include <limits.h>
- #endif // __cplusplus
+  * THE SOFTWARE.
+  */
  
--// Define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H ...) to include the
+-// Define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H=1 ...) to include the
 -// printf_config.h header file
 -#if PRINTF_INCLUDE_CONFIG_H
 -#include "printf_config.h"
 -#endif
  
- #include <stdbool.h>
- #include <stdint.h>
+ #include <printf/printf.h>
+ 
 @@ -294,6 +294,12 @@ static inline int get_exp2(double_with_bit_access x)
  // behavior with -LONG_MIN or -LLONG_MIN
  #define ABS_FOR_PRINTING(_x) ((printf_unsigned_value_t) ( (_x) > 0 ? (_x) : -((printf_signed_value_t)_x) ))
@@ -27,24 +27,6 @@ index 471ec6c..7f5532f 100644
  // wrapper (used as buffer) for output function type
  //
  // One of the following must hold:
-@@ -358,7 +354,7 @@ static inline void putchar_wrapper(char c, void* unused)
-   putchar_(c);
- }
- 
--static inline output_gadget_t discarding_gadget()
-+static inline output_gadget_t discarding_gadget(void)
- {
-   output_gadget_t gadget;
-   gadget.function = NULL;
-@@ -390,7 +386,7 @@ static inline output_gadget_t function_gadget(void (*function)(char, void*), voi
-   return result;
- }
- 
--static inline output_gadget_t extern_putchar_gadget()
-+static inline output_gadget_t extern_putchar_gadget(void)
- {
-   return function_gadget(putchar_wrapper, NULL);
- }
 @@ -521,7 +517,7 @@ static void print_integer_finalization(output_gadget_t* output, char* buf, print
  }
  

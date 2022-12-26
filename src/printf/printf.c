@@ -37,21 +37,17 @@
  * THE SOFTWARE.
  */
 
+
+#include <printf/printf.h>
+
 #ifdef __cplusplus
 #include <cstdint>
 #include <climits>
-extern "C" {
 #else
-#include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
-#endif // __cplusplus
-
-
 #include <stdbool.h>
-#include <stdint.h>
-
-#include <printf/printf.h>
+#endif // __cplusplus
 
 #if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES
 # define printf_    printf
@@ -121,6 +117,11 @@ extern "C" {
 #error "At least one non-constant Taylor expansion is necessary for the log10() calculation"
 #endif
 
+// Be extra-safe, and don't assume format specifiers are completed correctly
+// before the format string end.
+#ifndef PRINTF_CHECK_FOR_NUL_IN_FORMAT_SPECIFIER
+#define PRINTF_CHECK_FOR_NUL_IN_FORMAT_SPECIFIER 1
+#endif
 
 #define PRINTF_PREFER_DECIMAL     false
 #define PRINTF_PREFER_EXPONENTIAL true
@@ -625,7 +626,15 @@ static double apply_scaling(double num, struct scaling_factor normalization)
 
 static double unapply_scaling(double normalized, struct scaling_factor normalization)
 {
+#ifdef __GNUC__
+// accounting for a static analysis bug in GCC 6.x and earlier
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
   return normalization.multiply ? normalized / normalization.raw_factor : normalized * normalization.raw_factor;
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 }
 
 static struct scaling_factor update_normalization(struct scaling_factor sf, double extra_multiplicative_factor)
@@ -1028,27 +1037,25 @@ static printf_flags_t parse_flags(const char** format)
   } while (true);
 }
 
-// internal vsnprintf - used for implementing _all library functions
-// Note: We don't like the C standard's parameter names, so using more informative parameter names
-// here instead.
-static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
+static inline void format_string_loop(output_gadget_t* output, const char* format, va_list args)
 {
-  // Note: The library only calls _vsnprintf() with output->pos being 0. However, it is
-  // possible to call this function with a non-zero pos value for some "remedial printing".
+#if PRINTF_CHECK_FOR_NUL_IN_FORMAT_SPECIFIER
+#define ADVANCE_IN_FORMAT_STRING(cptr_) do { (cptr_)++; if (!*(cptr_)) return; } while(0)
+#else
+#define ADVANCE_IN_FORMAT_STRING(cptr_) (cptr_)++
+#endif
+
 
   while (*format)
   {
-    // format specifier?  %[flags][width][.precision][length]
     if (*format != '%') {
-      // no
+      // A regular content character
       putchar_via_gadget(output, *format);
       format++;
       continue;
     }
-    else {
-      // yes, evaluate it
-      format++;
-    }
+    // We're parsing a format specifier: %[flags][width][.precision][length]
+    ADVANCE_IN_FORMAT_STRING(format);
 
     printf_flags_t flags = parse_flags(&format);
 
@@ -1066,21 +1073,21 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
       else {
         width = (printf_size_t)w;
       }
-      format++;
+      ADVANCE_IN_FORMAT_STRING(format);
     }
 
     // evaluate precision field
     printf_size_t precision = 0U;
     if (*format == '.') {
       flags |= FLAGS_PRECISION;
-      format++;
+      ADVANCE_IN_FORMAT_STRING(format);
       if (is_digit_(*format)) {
         precision = (printf_size_t) atou_(&format);
       }
       else if (*format == '*') {
         const int precision_ = va_arg(args, int);
         precision = precision_ > 0 ? (printf_size_t) precision_ : 0U;
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
       }
     }
 
@@ -1088,23 +1095,23 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
     switch (*format) {
 #ifdef PRINTF_SUPPORT_MSVC_STYLE_INTEGER_SPECIFIERS
       case 'I' : {
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         // Greedily parse for size in bits: 8, 16, 32 or 64
         switch(*format) {
           case '8':               flags |= FLAGS_INT8;
-            format++;
+            ADVANCE_IN_FORMAT_STRING(format);
             break;
           case '1':
-            format++;
-            if (*format == '6') { format++; flags |= FLAGS_INT16; }
+            ADVANCE_IN_FORMAT_STRING(format);
+          if (*format == '6') { format++; flags |= FLAGS_INT16; }
             break;
           case '3':
-            format++;
-            if (*format == '2') { format++; flags |= FLAGS_INT32; }
+            ADVANCE_IN_FORMAT_STRING(format);
+            if (*format == '2') { ADVANCE_IN_FORMAT_STRING(format); flags |= FLAGS_INT32; }
             break;
           case '6':
-            format++;
-            if (*format == '4') { format++; flags |= FLAGS_INT64; }
+            ADVANCE_IN_FORMAT_STRING(format);
+            if (*format == '4') { ADVANCE_IN_FORMAT_STRING(format); flags |= FLAGS_INT64; }
             break;
           default: break;
         }
@@ -1113,31 +1120,31 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
 #endif
       case 'l' :
         flags |= FLAGS_LONG;
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         if (*format == 'l') {
           flags |= FLAGS_LONG_LONG;
-          format++;
+          ADVANCE_IN_FORMAT_STRING(format);
         }
         break;
       case 'h' :
         flags |= FLAGS_SHORT;
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         if (*format == 'h') {
           flags |= FLAGS_CHAR;
-          format++;
+          ADVANCE_IN_FORMAT_STRING(format);
         }
         break;
       case 't' :
         flags |= (sizeof(ptrdiff_t) == sizeof(long) ? FLAGS_LONG : FLAGS_LONG_LONG);
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         break;
       case 'j' :
         flags |= (sizeof(intmax_t) == sizeof(long) ? FLAGS_LONG : FLAGS_LONG_LONG);
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         break;
       case 'z' :
         flags |= (sizeof(size_t) == sizeof(long) ? FLAGS_LONG : FLAGS_LONG_LONG);
-        format++;
+        ADVANCE_IN_FORMAT_STRING(format);
         break;
       default:
         break;
@@ -1340,6 +1347,14 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
         break;
     }
   }
+}
+
+// internal vsnprintf - used for implementing _all library functions
+static int vsnprintf_impl(output_gadget_t* output, const char* format, va_list args)
+{
+  // Note: The library only calls vsnprintf_impl() with output->pos being 0. However, it is
+  // possible to call this function with a non-zero pos value for some "remedial printing".
+  format_string_loop(output, format, args);
 
   // termination
   append_termination_with_gadget(output);
@@ -1348,19 +1363,18 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
   return (int)output->pos;
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 
 int vprintf_(const char* format, va_list arg)
 {
   output_gadget_t gadget = extern_putchar_gadget();
-  return _vsnprintf(&gadget, format, arg);
+  return vsnprintf_impl(&gadget, format, arg);
 }
 
 int vsnprintf_(char* s, size_t n, const char* format, va_list arg)
 {
   output_gadget_t gadget = buffer_gadget(s, n);
-  return _vsnprintf(&gadget, format, arg);
+  return vsnprintf_impl(&gadget, format, arg);
 }
 
 int vsprintf_(char* s, const char* format, va_list arg)
@@ -1371,7 +1385,7 @@ int vsprintf_(char* s, const char* format, va_list arg)
 int vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, va_list arg)
 {
   output_gadget_t gadget = function_gadget(out, extra_arg);
-  return _vsnprintf(&gadget, format, arg);
+  return vsnprintf_impl(&gadget, format, arg);
 }
 
 int printf_(const char* format, ...)
@@ -1410,7 +1424,3 @@ int fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char*
   return ret;
 }
 
-
-#ifdef __cplusplus
-} // extern "C"
-#endif

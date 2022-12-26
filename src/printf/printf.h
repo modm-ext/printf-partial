@@ -49,11 +49,16 @@ extern "C" {
 #endif
 
 #ifdef __GNUC__
+# if ((__GNUC__ == 4 && __GNUC_MINOR__>= 4) || __GNUC__ > 4)
+#  define ATTR_PRINTF(one_based_format_index, first_arg) \
+__attribute__((format(gnu_printf, (one_based_format_index), (first_arg))))
+# else
 # define ATTR_PRINTF(one_based_format_index, first_arg) \
-__attribute__((format(__printf__, (one_based_format_index), (first_arg))))
+__attribute__((format(printf, (one_based_format_index), (first_arg))))
+# endif
 # define ATTR_VPRINTF(one_based_format_index) ATTR_PRINTF((one_based_format_index), 0)
 #else
-# define ATTR_PRINTF((one_based_format_index), (first_arg))
+# define ATTR_PRINTF(one_based_format_index, first_arg)
 # define ATTR_VPRINTF(one_based_format_index)
 #endif
 
@@ -63,7 +68,7 @@ __attribute__((format(__printf__, (one_based_format_index), (first_arg))))
 #define PRINTF_ALIAS_STANDARD_FUNCTION_NAMES 0
 #endif
 
-#if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES
+#if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES_HARD
 # define printf_    printf
 # define sprintf_   sprintf
 # define vsprintf_  vsprintf
@@ -191,13 +196,22 @@ int vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char
 } // extern "C"
 #endif
 
-#if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES
+#if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES_HARD
 # undef printf_
 # undef sprintf_
 # undef vsprintf_
 # undef snprintf_
 # undef vsnprintf_
 # undef vprintf_
+#else
+#if PRINTF_ALIAS_STANDARD_FUNCTION_NAMES_SOFT
+# define printf     printf_
+# define sprintf    sprintf_
+# define vsprintf   vsprintf_
+# define snprintf   snprintf_
+# define vsnprintf  vsnprintf_
+# define vprintf    vprintf_
+#endif
 #endif
 
 #endif  // PRINTF_H_
