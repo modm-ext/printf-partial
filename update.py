@@ -37,7 +37,11 @@ for pattern in source_paths:
                            dest.open("w", encoding="utf-8") as wfile:
             wfile.writelines(l.rstrip()+"\n" for l in rfile.readlines())
 
-subprocess.run("git apply printf.patch", shell=True)
+print("Apply patch...")
+if subprocess.call("git apply -v --ignore-whitespace printf.patch", shell=True):
+    print("Patch failed to apply!...")
+    exit(1)
+
 subprocess.run("git add LICENSE src", shell=True)
 if subprocess.call("git diff-index --quiet HEAD --", shell=True):
     subprocess.run('git commit -m "Update printf to {}"'.format(tag), shell=True)
