@@ -63,8 +63,6 @@ ATTR_PRINTF((one_based_format_index), 0)
 # define ATTR_VPRINTF(one_based_format_index)
 #endif
 
-#include <printf/printf_config.h>
-
 #ifndef PRINTF_ALIAS_STANDARD_FUNCTION_NAMES_SOFT
 #define PRINTF_ALIAS_STANDARD_FUNCTION_NAMES_SOFT 0
 #endif
